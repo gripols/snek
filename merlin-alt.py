@@ -6,6 +6,7 @@ import soundfile as sf
 import torch
 from plyer import notification  # Import the notification library
 
+# TODO: Merlin Alt or Merlin 2?? That is the question
 from lib import dataset
 from lib import netta
 from lib import spec_utils
