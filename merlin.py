@@ -9,7 +9,7 @@ import numpy as np
 
 from lib import dataset
 from lib import spec_utils
-from lib import unet
+from lib import netta
 
 
 p = argparse.ArgumentParser()
