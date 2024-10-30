@@ -3,7 +3,6 @@ import chainer.functions as F
 import chainer.links as L
 from lib import spec_utils
 
-
 class Conv2DBNActiv(chainer.Chain):
     def __init__(self, in_channels, out_channels, ksize, stride=1, pad=0, 
                  nobias=False, activ=F.relu):
