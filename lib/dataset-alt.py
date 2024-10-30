@@ -1,3 +1,21 @@
+"""
+Prepares and augments datasets to train
+snek model. Includes utils for loading and splitting
+datasets, applying augmentation, and creating training 
+and validation sets from audio files.
+
+Classes
+- `vocal_remover_valid`: Manages loading and accessing validation data patches.
+
+Functions
+- `make_pair`: Generates file pairs of mixture and instrumental files.
+- `train_val_split`: Splits the dataset into training and validation sets.
+- `augment`: Applies various data augmentations on input and target audio spectrograms.
+- `make_padding`: Computes padding for spectrograms to fit the target crop size.
+- `make_training_set`: Creates training patches from input data.
+- `make_validation_set`: Generates validation patches and saves them as `.npz` files.
+"""
+
 import os
 import random
 # THIS IS THE GOOD ONE I THINK
@@ -5,7 +23,6 @@ import numpy as np
 import torch
 import torch.utils.data
 from tqdm import tqdm
-
 from lib import spec_utils
 
 class vocal_remover_valid(torch.utils.data.Dataset):
@@ -56,7 +73,7 @@ def train_val_split(dataset_dir, split_mode, val_rate, val_filelist):
 
         if len(val_filelist) == 0:
             val_size = int(len(filelist) * val_rate)
-            # DO NOT CONFUSE THE TWO
+            # DO NOT CONFUSE
             train_filelist = filelist[:-val_size]
             val_filelist = filelist[-val_size:]
         else: 
@@ -81,7 +98,6 @@ def augment (X, y, reduction_mask, reduction_rate, mixup_rate, mixup_alpha):
     permutate = np.random.permutation(len(X))
     for i, idx in enumerate(tqdm(permutate)):
         if np.random.uniform() < reduction_rate:
-            # tf is this function name
             y[idx] = spec_utils.reduce_vocal_aggressively(X[idx], y[idx], reduction_mask)
 
         if np.random.uniform() < 0.5:
@@ -90,7 +106,6 @@ def augment (X, y, reduction_mask, reduction_rate, mixup_rate, mixup_alpha):
             y[idx] = y[idx, ::-1]
 
         if np.random.uniform() < 0.02:
-            # mono ???
             X[idx] = X[idx].mean(axis=0, keepdims=True)
             y[idx] = y[idx].mean(axis=0, keepdims=True)
 
