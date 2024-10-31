@@ -40,6 +40,8 @@ def parse_arguments():
     parser.add_argument('--debug', action='store_true')
     return parser.parse_args()
 """
+
+
 def load_model(args):
     model = unet.SpecUNet()
     chainer.serializers.load_npz(args.model, model)
@@ -108,7 +110,8 @@ def main():
 
     inst_preds = np.concatenate(inst_preds, axis=2)
     print('Instrumental inverse STFT...', end=' ')
-    instrumental_waveform = spec_utils.spec_to_wav(inst_preds, phase, 512, ref_max)
+    instrumental_waveform = spec_utils.spec_to_wav(
+        inst_preds, phase, 512, ref_max)
     print('done')
     save_audio(instrumental_waveform, 'instrumental.wav', args.sr)
 

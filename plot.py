@@ -3,10 +3,12 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 
+
 def load_log(file_path):
     # get training and validation loss data from json
     with open(file_path, 'r', encoding='utf8') as f:
         return np.asarray(json.load(f))
+
 
 def plot_loss(trn_loss, val_loss):
     plt.rcParams['font.size'] = 12
@@ -25,6 +27,7 @@ def plot_loss(trn_loss, val_loss):
     plt.tight_layout()
     plt.show()
 
+
 def main(file_path):
     log_data = load_log(file_path)
     print("Minimum loss values (training, validation):", np.min(log_data, axis=0))
@@ -33,6 +36,7 @@ def main(file_path):
     val_loss = log_data[:, 1]
 
     plot_loss(trn_loss, val_loss)
+
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:

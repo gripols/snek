@@ -15,7 +15,8 @@ class BaseNet(nn.Module):
         self.enc4 = layers.Encoder(nout * 4, nout * 6, 3, 2, 1)
         self.enc5 = layers.Encoder(nout * 6, nout * 8, 3, 2, 1)
 
-        self.aspp = layers.ASPPModule(nout * 8, nout * 8, dilations, dropout=True)
+        self.aspp = layers.ASPPModule(
+            nout * 8, nout * 8, dilations, dropout=True)
 
         self.dec4 = layers.Decoder(nout * (6 + 8), nout * 6, 3, 1, 1)
         self.dec3 = layers.Decoder(nout * (4 + 6), nout * 4, 3, 1, 1)

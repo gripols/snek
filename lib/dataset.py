@@ -25,14 +25,15 @@ import torch.utils.data
 from tqdm import tqdm
 from lib import spec_utils
 
+
 class vocal_remover_valid(torch.utils.data.Dataset):
-    
+
     def __init__(self, patch_list):
         self.patch_list = patch_list
 
     def __len__(self):
         return len(self.patch_list)
-    
+
     def __getitem__(self, idx):
         path = self.patch_list[idx]
         data = np.load(path)
@@ -46,7 +47,7 @@ class vocal_remover_valid(torch.utils.data.Dataset):
 
 
 def make_pair(mix_dir, inst_dir):
-    
+
     input_exts = ['.wav', '.mp3', '.mp4', '.flac']
 
     X_list = sorted([
@@ -68,7 +69,7 @@ def train_val_split(dataset_dir, split_mode, val_rate, val_filelist):
         filelist = make_pair(
             os.path.join(dataset_dir, 'mixes'),
             os.path.join(dataset_dir, 'instrs'))
-        
+
         random.shuffle(filelist)
 
         if len(val_filelist) == 0:
@@ -76,14 +77,15 @@ def train_val_split(dataset_dir, split_mode, val_rate, val_filelist):
             # DO NOT CONFUSE
             train_filelist = filelist[:-val_size]
             val_filelist = filelist[-val_size:]
-        else: 
+        else:
             train_filelist = [
                 pair for pair in filelist
                 if list(pair) not in val_filelist]
     elif split_mode == 'subdirs':
         if len(val_filelist) != 0:
-            raise ValueError(' `val_filelist` option is not available in subdirs mode lmao get gud')
-        
+            raise ValueError(
+                ' `val_filelist` option is not available in subdirs mode lmao get gud')
+
         train_filelist = make_pair(
             os.path.join(dataset_dir, 'train/mixes'),
             os.path.join(dataset_dir, 'train/instrs'))
@@ -94,11 +96,13 @@ def train_val_split(dataset_dir, split_mode, val_rate, val_filelist):
 
         return train_filelist, val_filelist
 
-def augment (X, y, reduction_mask, reduction_rate, mixup_rate, mixup_alpha):
+
+def augment(X, y, reduction_mask, reduction_rate, mixup_rate, mixup_alpha):
     permutate = np.random.permutation(len(X))
     for i, idx in enumerate(tqdm(permutate)):
         if np.random.uniform() < reduction_rate:
-            y[idx] = spec_utils.reduce_vocal_aggressively(X[idx], y[idx], reduction_mask)
+            y[idx] = spec_utils.reduce_vocal_aggressively(
+                X[idx], y[idx], reduction_mask)
 
         if np.random.uniform() < 0.5:
             # swap channel
@@ -143,7 +147,7 @@ def make_training_set(cropsize, filelist, hop_length, n_fft, offset, sr):
         X, y = spec_utils.cache_or_load(X_path, y_path, sr, hop_length, n_fft)
         coeff = np.max([np.abs(X).max(), np.abs(y).max()])
         X, y = X / coeff, y / coeff
-        
+
         l, r, roi_size = make_padding(X.shape[2], cropsize, offset)
         X_pad = np.pad(X, ((0, 0), (0, 0), (l, r)), mode='constant')
         y_pad = np.pad(X, ((0, 0), (0, 0), (l, r)), mode='constant')
@@ -158,9 +162,11 @@ def make_training_set(cropsize, filelist, hop_length, n_fft, offset, sr):
 
     return X_dataset, y_dataset
 
+
 def make_validation_set(cropsize, filelist, hop_length, n_fft, offset, sr):
     patch.list = []
-    patch_dir = 'cs{}_sr{}_hl{}_nf{}_of{}'.format(cropsize, sr, hop_length, n_fft, offset)
+    patch_dir = 'cs{}_sr{}_hl{}_nf{}_of{}'.format(
+        cropsize, sr, hop_length, n_fft, offset)
     os.makedirs(patch_dir, exist_ok=True)
 
     for i, (X_path, y_path) in enumerate(tqdm(filelist)):

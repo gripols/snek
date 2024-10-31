@@ -12,6 +12,8 @@ from lib import spec_utils
 from lib import netta
 
 # Parse command-line arguments
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--gpu', '-g', type=int, default=-1)
@@ -31,6 +33,7 @@ def parse_args():
     parser.add_argument('--mixup_alpha', '-a', type=float, default=0.4)
     return parser.parse_args()
 
+
 def set_random_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -38,24 +41,30 @@ def set_random_seed(seed):
         chainer.backends.cuda.cupy.random.seed(seed)
     chainer.global_config.autotune = True
 
+
 def prepare_filelists(mixture_dataset, instrumental_dataset, validation_split=20):
     input_exts = ['.wav', '.m4a', '.3gp', '.oma', '.mp3', '.mp4']
     mixture_files = sorted(
-        [fname for fname in os.listdir(mixture_dataset) if os.path.splitext(fname)[1] in input_exts]
+        [fname for fname in os.listdir(mixture_dataset) if os.path.splitext(fname)[
+            1] in input_exts]
     )
     instrumental_files = sorted(
-        [fname for fname in os.listdir(instrumental_dataset) if os.path.splitext(fname)[1] in input_exts]
+        [fname for fname in os.listdir(instrumental_dataset) if os.path.splitext(fname)[
+            1] in input_exts]
     )
-    
+
     filelist = list(zip(
         [os.path.join(mixture_dataset, fname) for fname in mixture_files],
-        [os.path.join(instrumental_dataset, fname) for fname in instrumental_files]
+        [os.path.join(instrumental_dataset, fname)
+         for fname in instrumental_files]
     ))
-    
+
     random.shuffle(filelist)
     return filelist[:-validation_split], filelist[-validation_split:]
 
 # Train model
+
+
 def train(model, optimizer, X_train, y_train, batchsize, device, mixup, mixup_alpha):
     sum_loss = 0
     perm = np.random.permutation(len(X_train))
@@ -92,7 +101,8 @@ def validate(model, X_valid, y_valid, batchsize, device):
             y_batch = spec_utils.crop_and_concat(mask, y_batch, False)
 
             inst_loss = F.mean_squared_error(X_batch * mask, y_batch)
-            vocal_loss = F.mean_squared_error(X_batch * (1 - mask), X_batch - y_batch)
+            vocal_loss = F.mean_squared_error(
+                X_batch * (1 - mask), X_batch - y_batch)
             loss = inst_loss + vocal_loss
             sum_loss += float(loss.data) * len(X_batch)
 
@@ -113,24 +123,30 @@ def main():
     optimizer = chainer.optimizers.Adam(args.learning_rate)
     optimizer.setup(model)
 
-
-    train_filelist, valid_filelist = prepare_filelists(args.mixture_dataset, args.instrumental_dataset)
-    X_valid, y_valid = dataset.create_dataset(valid_filelist, args.cropsize, validation=True)
+    train_filelist, valid_filelist = prepare_filelists(
+        args.mixture_dataset, args.instrumental_dataset)
+    X_valid, y_valid = dataset.create_dataset(
+        valid_filelist, args.cropsize, validation=True)
 
     best_loss = np.inf
     patience_counter = 0
 
     for epoch in range(args.epoch):
         random.shuffle(train_filelist)
-        X_train, y_train = dataset.create_dataset(train_filelist[:100], args.cropsize)
+        X_train, y_train = dataset.create_dataset(
+            train_filelist[:100], args.cropsize)
         if args.mixup:
-            X_train, y_train = dataset.mixup_generator(X_train, y_train, args.mixup_alpha)
-        
-        print(f'# Epoch {epoch}')
-        train_loss = train(model, optimizer, X_train, y_train, args.batchsize, model.device, args.mixup, args.mixup_alpha)
-        valid_loss = validate(model, X_valid, y_valid, args.val_batchsize, model.device)
+            X_train, y_train = dataset.mixup_generator(
+                X_train, y_train, args.mixup_alpha)
 
-        print(f'  Training Loss: {train_loss:.6f} | Validation Loss: {valid_loss:.6f}')
+        print(f'# Epoch {epoch}')
+        train_loss = train(model, optimizer, X_train, y_train,
+                           args.batchsize, model.device, args.mixup, args.mixup_alpha)
+        valid_loss = validate(model, X_valid, y_valid,
+                              args.val_batchsize, model.device)
+
+        print(
+            f'  Training Loss: {train_loss:.6f} | Validation Loss: {valid_loss:.6f}')
 
         # Save best model
         if valid_loss < best_loss:
@@ -151,6 +167,7 @@ def main():
         # Clear memory
         del X_train, y_train
         gc.collect()
+
 
 if __name__ == '__main__':
     main()
