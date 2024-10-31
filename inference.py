@@ -8,7 +8,7 @@ import torch
 from tqdm import tqdm
 
 from lib import dataset
-from lib import nets
+from lib import netta
 from lib import spec_utils
 from lib import utils
 
@@ -69,8 +69,10 @@ class Separator(object):
 
     def separate(self, X_spec):
         n_frame = X_spec.shape[2]
-        pad_l, pad_r, roi_size = dataset.make_padding(n_frame, self.cropsize, self.offset)
-        X_spec_pad = np.pad(X_spec, ((0, 0), (0, 0), (pad_l, pad_r)), mode='constant')
+        pad_l, pad_r, roi_size = dataset.make_padding(
+            n_frame, self.cropsize, self.offset)
+        X_spec_pad = np.pad(
+            X_spec, ((0, 0), (0, 0), (pad_l, pad_r)), mode='constant')
         X_spec_pad /= np.abs(X_spec).max()
 
         mask = self._separate(X_spec_pad, roi_size)
@@ -82,15 +84,18 @@ class Separator(object):
 
     def separate_tta(self, X_spec):
         n_frame = X_spec.shape[2]
-        pad_l, pad_r, roi_size = dataset.make_padding(n_frame, self.cropsize, self.offset)
-        X_spec_pad = np.pad(X_spec, ((0, 0), (0, 0), (pad_l, pad_r)), mode='constant')
+        pad_l, pad_r, roi_size = dataset.make_padding(
+            n_frame, self.cropsize, self.offset)
+        X_spec_pad = np.pad(
+            X_spec, ((0, 0), (0, 0), (pad_l, pad_r)), mode='constant')
         X_spec_pad /= X_spec_pad.max()
 
         mask = self._separate(X_spec_pad, roi_size)
 
         pad_l += roi_size // 2
         pad_r += roi_size // 2
-        X_spec_pad = np.pad(X_spec, ((0, 0), (0, 0), (pad_l, pad_r)), mode='constant')
+        X_spec_pad = np.pad(
+            X_spec, ((0, 0), (0, 0), (pad_l, pad_r)), mode='constant')
         X_spec_pad /= X_spec_pad.max()
 
         mask_tta = self._separate(X_spec_pad, roi_size)
@@ -101,13 +106,16 @@ class Separator(object):
 
         return y_spec, v_spec
 
+
 MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
 DEFAULT_MODEL_PATH = os.path.join(MODEL_DIR, 'baseline.pth')
+
 
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--gpu', '-g', type=int, default=-1)
-    p.add_argument('--pretrained_model', '-P', type=str, default=DEFAULT_MODEL_PATH)
+    p.add_argument('--pretrained_model', '-P',
+                   type=str, default=DEFAULT_MODEL_PATH)
     p.add_argument('--input', '-i', required=True)
     p.add_argument('--sr', '-r', type=int, default=44100)
     p.add_argument('--n_fft', '-f', type=int, default=2048)
@@ -127,8 +135,9 @@ def main():
             device = torch.device('cuda:{}'.format(args.gpu))
         elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
             device = torch.device('mps')
-    model = nets.CascadedNet(args.n_fft, args.hop_length, 32, 128)
-    model.load_state_dict(torch.load(args.pretrained_model, map_location='cpu'))
+    model = netta.CascadedNet(args.n_fft, args.hop_length, 32, 128)
+    model.load_state_dict(torch.load(
+        args.pretrained_model, map_location='cpu'))
     model.to(device)
     print('done')
 
@@ -179,7 +188,8 @@ def main():
 
     if args.output_image:
         image = spec_utils.spectrogram_to_image(y_spec)
-        utils.imwrite('{}{}_Instruments.jpg'.format(output_dir, basename), image)
+        utils.imwrite('{}{}_Instruments.jpg'.format(
+            output_dir, basename), image)
 
         image = spec_utils.spectrogram_to_image(v_spec)
         utils.imwrite('{}{}_Vocals.jpg'.format(output_dir, basename), image)
