@@ -31,7 +31,6 @@ def parse_args():
     parser.add_argument('--mixup_alpha', '-a', type=float, default=0.4)
     return parser.parse_args()
 
-# Set random seeds for reproducibility
 def set_random_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
@@ -39,7 +38,6 @@ def set_random_seed(seed):
         chainer.backends.cuda.cupy.random.seed(seed)
     chainer.global_config.autotune = True
 
-# Prepare file lists for training and validation
 def prepare_filelists(mixture_dataset, instrumental_dataset, validation_split=20):
     input_exts = ['.wav', '.m4a', '.3gp', '.oma', '.mp3', '.mp4']
     mixture_files = sorted(
@@ -79,7 +77,7 @@ def train(model, optimizer, X_train, y_train, batchsize, device, mixup, mixup_al
 
     return sum_loss / len(X_train)
 
-# Validate model
+
 def validate(model, X_valid, y_valid, batchsize, device):
     sum_loss = 0
     perm = np.random.permutation(len(X_valid))
@@ -100,7 +98,7 @@ def validate(model, X_valid, y_valid, batchsize, device):
 
     return sum_loss / len(X_valid)
 
-# Main training loop
+
 def main():
     args = parse_args()
     set_random_seed(args.seed)
@@ -115,7 +113,7 @@ def main():
     optimizer = chainer.optimizers.Adam(args.learning_rate)
     optimizer.setup(model)
 
-    # Prepare datasets
+
     train_filelist, valid_filelist = prepare_filelists(args.mixture_dataset, args.instrumental_dataset)
     X_valid, y_valid = dataset.create_dataset(valid_filelist, args.cropsize, validation=True)
 
