@@ -6,6 +6,8 @@ import numpy as np
 import soundfile as sf
 import torch
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+import librosa.display
 
 from lib import dataset
 from lib import netta
@@ -169,24 +171,62 @@ def main():
     else:
         y_spec, v_spec = sp.separate(X_spec)
 
-    print('validating output directory...', end=' ')
-    output_dir = args.output_dir
-    if output_dir != "":  # modifies output_dir if theres an arg specified
-        output_dir = output_dir.rstrip('/') + '/'
-        os.makedirs(output_dir, exist_ok=True)
+    # Inverse STFT for separated instruments and vocals
+    print('Inverse STFT of instruments...', end=' ')
+    wave_instruments = spec_utils.spectrogram_to_wave(
+        y_spec, hop_length=args.hop_length)
     print('done')
+    sf.write('{}{}_Instruments.wav'.format(
+        output_dir, basename), wave_instruments.T, sr)
 
-    print('inverse stft of instruments...', end=' ')
-    wave = spec_utils.spectrogram_to_wave(y_spec, hop_length=args.hop_length)
+    print('Inverse STFT of vocals...', end=' ')
+    wave_vocals = spec_utils.spectrogram_to_wave(
+        v_spec, hop_length=args.hop_length)
     print('done')
-    sf.write('{}{}_Instruments.wav'.format(output_dir, basename), wave.T, sr)
+    sf.write('{}{}_Vocals.wav'.format(output_dir, basename), wave_vocals.T, sr)
 
-    print('inverse stft of vocals...', end=' ')
-    wave = spec_utils.spectrogram_to_wave(v_spec, hop_length=args.hop_length)
-    print('done')
-    sf.write('{}{}_Vocals.wav'.format(output_dir, basename), wave.T, sr)
+    # Now generate and save spectrograms for instruments
+    print('Generating spectrogram for instruments...')
+    D_instruments = librosa.stft(wave_instruments)
+
+# Loop through each channel
+# D_instruments.shape[0] is 2 for stereo
+    for i in range(D_instruments.shape[0]):
+        S_db_instruments = librosa.amplitude_to_db(
+            np.abs(D_instruments[i]), ref=np.max)
+        plt.figure(figsize=(12, 8))
+        librosa.display.specshow(S_db_instruments, sr=sr,
+                                 x_axis='time', y_axis='log', cmap='viridis')
+        plt.title(f'Spectrogram of Instruments Channel {i + 1} (dB)')
+        plt.colorbar(format='%+2.0f dB')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Frequency (Hz)')
+        plt.grid(True)
+        plt.savefig('{}{}_Instruments_Channel_{}.png'.format(
+            output_dir, basename, i + 1), dpi=300, bbox_inches='tight')
+        plt.close()
+
+    # Now generate and save spectrograms for vocals
+    print('Generating spectrogram for vocals...')
+    D_vocals = librosa.stft(wave_vocals)
+
+    # Loop through each channel
+    for i in range(D_vocals.shape[0]):  # D_vocals.shape[0] is 2 for stereo
+        S_db_vocals = librosa.amplitude_to_db(np.abs(D_vocals[i]), ref=np.max)
+        plt.figure(figsize=(12, 8))
+        librosa.display.specshow(
+            S_db_vocals, sr=sr, x_axis='time', y_axis='log', cmap='viridis')
+        plt.title(f'Spectrogram of Vocals Channel {i + 1} (dB)')
+        plt.colorbar(format='%+2.0f dB')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Frequency (Hz)')
+        plt.grid(True)
+        plt.savefig('{}{}_Vocals_Channel_{}.png'.format(
+            output_dir, basename, i + 1), dpi=300, bbox_inches='tight')
+        plt.close()
 
     if args.output_image:
+        # Optional: if you still want to save the original images as well
         image = spec_utils.spectrogram_to_image(y_spec)
         utils.imwrite('{}{}_Instruments.jpg'.format(
             output_dir, basename), image)
