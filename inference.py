@@ -12,8 +12,8 @@ from lib import netta
 from lib import spec_utils
 from lib import utils
 
-class Separator(object):
-
+class Separator:
+    # good
     def __init__(self, model, device=None, batchsize=1, cropsize=256, postprocess=False):
         self.model = model
         self.offset = model.offset
@@ -22,6 +22,7 @@ class Separator(object):
         self.cropsize = cropsize
         self.postprocess = postprocess
 
+    # post process audio spectra
     def _postprocess(self, X_spec, mask):
         if self.postprocess:
             mask_mag = np.abs(mask)
@@ -33,38 +34,31 @@ class Separator(object):
 
         y_spec = mask * X_mag * np.exp(1.j * X_phase)
         v_spec = (1 - mask) * X_mag * np.exp(1.j * X_phase)
-        # y_spec = X_spec * mask
-        # v_spec = X_spec - y_spec
 
         return y_spec, v_spec
 
-    def _separate(self, X_spec_pad, roi_size):
-        X_dataset = []
-        patches = (X_spec_pad.shape[2] - 2 * self.offset) // roi_size
-        for i in range(patches):
-            start = i * roi_size
-            X_spec_crop = X_spec_pad[:, :, start:start + self.cropsize]
-            X_dataset.append(X_spec_crop)
 
+    def _separate(self, X_spec_pad, roi_size):
+        patches = (X_spec_pad.shape[2] - 2 * self.offset) // roi_size
+        X_dataset = [
+            X_spec_pad[:, :, i * roi_size: (i + 1)] for i in range(patches)
+        ]
         X_dataset = np.asarray(X_dataset)
+        
 
         self.model.eval()
         with torch.no_grad():
             mask_list = []
             # To reduce the overhead, dataloader is not used.
             for i in tqdm(range(0, patches, self.batchsize)):
-                X_batch = X_dataset[i: i + self.batchsize]
-                X_batch = torch.from_numpy(X_batch).to(self.device)
-
+                X_batch = torch.from_numpy(X_dataset[i: i + self.batchsize]).to(self.device) 
                 mask = self.model.predict_mask(torch.abs(X_batch))
-
-                mask = mask.detach().cpu().numpy()
-                mask = np.concatenate(mask, axis=2)
-                mask_list.append(mask)
+                mask_list.append(mask.detach().cpu().numpy())
 
             mask = np.concatenate(mask_list, axis=2)
 
         return mask
+
 
     def separate(self, X_spec):
         n_frame = X_spec.shape[2]
@@ -75,9 +69,8 @@ class Separator(object):
         mask = self._separate(X_spec_pad, roi_size)
         mask = mask[:, :, :n_frame]
 
-        y_spec, v_spec = self._postprocess(X_spec, mask)
+        return self._postprocess(X_spec, mask) 
 
-        return y_spec, v_spec
 
     def separate_tta(self, X_spec):
         n_frame = X_spec.shape[2]
@@ -94,16 +87,14 @@ class Separator(object):
 
         mask_tta = self._separate(X_spec_pad, roi_size)
         mask_tta = mask_tta[:, :, roi_size // 2:]
-        mask = (mask[:, :, :n_frame] + mask_tta[:, :, :n_frame]) * 0.5
+        mask = (mask[:, :, :n_frame] + mask_tta) * 0.5
 
-        y_spec, v_spec = self._postprocess(X_spec, mask)
-
-        return y_spec, v_spec
+        return self._postprocess(X_spec, mask) 
 
 MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
 DEFAULT_MODEL_PATH = os.path.join(MODEL_DIR, 'baseline.pth')
 
-def main():
+def parse_arguments():
     p = argparse.ArgumentParser()
     p.add_argument('--gpu', '-g', type=int, default=-1)
     p.add_argument('--pretrained_model', '-P', type=str, default=DEFAULT_MODEL_PATH)
@@ -119,69 +110,70 @@ def main():
     p.add_argument('--output_dir', '-o', type=str, default="")
     args = p.parse_args()
 
-    print('loading model...', end=' ')
-    device = torch.device('cpu')
-    if args.gpu >= 0:
-        if torch.cuda.is_available():
-            device = torch.device('cuda:{}'.format(args.gpu))
-        elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
-            device = torch.device('mps')
-    model = netta.CascadedNet(args.n_fft, args.hop_length, 32, 128)
-    model.load_state_dict(torch.load(args.pretrained_model, map_location='cpu'))
+def init_device(gpu):
+    if gpu >= 0 and torch.cuda.is_available():
+        return torch.device(f'cude:{gpu}')
+    return torch.device('cpu')
+
+
+def load_model(model_path, n_fft, hop_length, device):
+    model = netta.CascadedNet(n_fft, hop_length, 32, 128)
+    model.load_state_dict(torch.load(model_path, map_location='cpu'))
     model.to(device)
-    print('done')
+    return model
 
-    print('loading wave source...', end=' ')
-    X, sr = librosa.load(
-        args.input, sr=args.sr, mono=False, dtype=np.float32, res_type='kaiser_fast'
-    )
-    basename = os.path.splitext(os.path.basename(args.input))[0]
-    print('done')
 
+def load_audio(input_path, sr):
+    print('Loading audio source...', end=' ')
+    X, _ = librosa.load(input_path, sr=sr, mono=False, dtype=np.float32, res_type='kaiser_fast')
     if X.ndim == 1:
-        # mono to stereo
-        X = np.asarray([X, X])
+        X = np.asarray([X, X])  # mono to stereo
+    print('done')
+    return X
 
-    print('stft of wave source...', end=' ')
+
+def save_results(output_dir, basename, y_spec, v_spec, sr, output_image):
+    # TODO: improve spectrogram images 
+    os.makedirs(output_dir, exist_ok=True)
+
+    sf.write(os.path.join(output_dir, f'{basename}_Instruments.wav'), spec_utils.spectrogram_to_wave(y_spec, hop_length=args.hop_length).T, sr)
+    sf.write(os.path.join(output_dir, f'{basename}_Vocals.wav'), spec_utils.spectrogram_to_wave(v_spec, hop_length=args.hop_length).T, sr)
+
+    if output_image:
+        image_y = spec_utils.spectrogram_to_image(y_spec)
+        utils.imwrite(os.path.join(output_dir, f'{basename}_Instruments.jpg'), image_y)
+
+        image_v = spec_utils.spectrogram_to_image(v_spec)
+        utils.imwrite(os.path.join(output_dir, f'{basename}_Vocals.jpg'), image_v)
+
+
+def main():
+    args = parse_arguments()
+
+    print('Loading model', end=' ')
+    device = initialize_device(args.gpu)
+    model = load_model(args.pretrained_model, args.n_fft, args.hop_length, device)
+    print('done')
+
+    X = load_audio(args.input, args.sr)
+
+    print('Calculating STFT of audio source', end=' ')
     X_spec = spec_utils.wave_to_spectrogram(X, args.hop_length, args.n_fft)
     print('done')
 
-    sp = Separator(
-        model=model,
-        device=device,
-        batchsize=args.batchsize,
-        cropsize=args.cropsize,
-        postprocess=args.postprocess
-    )
+    separator = Separator(model, device, args.batchsize, args.cropsize, args.postprocess)
 
     if args.tta:
-        y_spec, v_spec = sp.separate_tta(X_spec)
+        y_spec, v_spec = separator.separate_tta(X_spec)
     else:
-        y_spec, v_spec = sp.separate(X_spec)
+        y_spec, v_spec = separator.separate(X_spec)
 
-    print('validating output directory...', end=' ')
-    output_dir = args.output_dir
-    if output_dir != "":  # modifies output_dir if theres an arg specified
-        output_dir = output_dir.rstrip('/') + '/'
-        os.makedirs(output_dir, exist_ok=True)
-    print('done')
+    output_dir = args.output_dir.rstrip('/') + '/'
+    basename = os.path.splitext(os.path.basename(args.input))[0]
 
-    print('inverse stft of instruments...', end=' ')
-    wave = spec_utils.spectrogram_to_wave(y_spec, hop_length=args.hop_length)
-    print('done')
-    sf.write('{}{}_Instruments.wav'.format(output_dir, basename), wave.T, sr)
-
-    print('inverse stft of vocals...', end=' ')
-    wave = spec_utils.spectrogram_to_wave(v_spec, hop_length=args.hop_length)
-    print('done')
-    sf.write('{}{}_Vocals.wav'.format(output_dir, basename), wave.T, sr)
-
-    if args.output_image:
-        image = spec_utils.spectrogram_to_image(y_spec)
-        utils.imwrite('{}{}_Instruments.jpg'.format(output_dir, basename), image)
-
-        image = spec_utils.spectrogram_to_image(v_spec)
-        utils.imwrite('{}{}_Vocals.jpg'.format(output_dir, basename), image)
+    print('Saving results')
+    save_results(output_dir, basename, y_spec, v_spec, args.sr, args.output_image)
+    print('Done')
 
 
 if __name__ == '__main__':
