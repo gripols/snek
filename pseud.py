@@ -11,7 +11,6 @@ from lib import dataset
 from lib import spec_utils
 from lib import netta
 
-
 p = argparse.ArgumentParser()
 p.add_argument('--gpu', '-g', type=int, default=-1)
 p.add_argument('--seed', '-s', type=int, default=2019)
