@@ -37,4 +37,22 @@ If I feel like learning more about git, sure.
   year          = 2019,
   doi           = {10.21105/joss.01667},
   url           = {https://doi.org/10.21105/joss.01667}
+@misc{beniwal2019convolutional,
+    title={Convolutional Neural Network for Human Activity Recognition using
+Wrist-based Data},
+    author={Animesh Beniwal, Shaunak Chatterjee, Xuqiang Fang, and Pranjal
+Kothari},
+    year={2019},
+    howpublished={\url{https://cs230.stanford.edu/projects_fall_2019/reports/26261998.pdf}},
+    note={Accessed: 2024-10-31}
+}}
+
+@misc{beniwal2019convolutional,
+    title={Audio Separation and Isolation: A Deep Neural
+Network Approach},
+    author={Ahmed Hamdy, Pratap Kiran Vedula ,Venkata Jasantha Konduru},
+    year={2019},
+    howpublished={\url{https://cs230.stanford.edu/projects_fall_2019/reports/26261998.pdf}},
+    note={Accessed: 2024-10-31}
 }
+
