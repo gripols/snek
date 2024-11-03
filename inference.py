@@ -1,5 +1,6 @@
 import argparse
 import os
+import warnings
 
 import librosa
 import numpy as np
@@ -134,7 +135,10 @@ def main():
     if output_dir != "":  # modifies output_dir if there's an arg specified
         output_dir = output_dir.rstrip('/') + '/'
         os.makedirs(output_dir, exist_ok=True)
-        
+
+    # FIXME: THIS IS A BANDAID ON A BROKEN LEG.
+    warnings.filterwarnings("ignore", "You are using `torch.load` with `weights_only=False`*.")       
+   
     print('loading model...', end=' ')
     device = torch.device('cpu')
     if args.gpu >= 0:
