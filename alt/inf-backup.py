@@ -15,8 +15,6 @@ from lib import netta
 from lib import spec_utils
 from lib import utils
 
-from pytubefix import YouTube
-from pytubefix.cli import on_progress
 
 class Separator(object):
 
@@ -39,6 +37,8 @@ class Separator(object):
 
         y_spec = mask * X_mag * np.exp(1.j * X_phase)
         v_spec = (1 - mask) * X_mag * np.exp(1.j * X_phase)
+        # y_spec = X_spec * mask
+        # v_spec = X_spec - y_spec
 
         return y_spec, v_spec
 
@@ -55,6 +55,7 @@ class Separator(object):
         self.model.eval()
         with torch.no_grad():
             mask_list = []
+            # To reduce the overhead, dataloader is not used.
             for i in tqdm(range(0, patches, self.batchsize)):
                 X_batch = X_dataset[i: i + self.batchsize]
                 X_batch = torch.from_numpy(X_batch).to(self.device)
@@ -113,21 +114,12 @@ MODEL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models')
 DEFAULT_MODEL_PATH = os.path.join(MODEL_DIR, 'baseline.pth')
 
 
-def generate_unique_filename(output_dir, base_name, extension):
-    counter = 1
-    unique_name = f"{base_name}{extension}"
-    while os.path.exists(os.path.join(output_dir, unique_name)):
-        unique_name = f"{base_name}_{counter}{extension}"
-        counter += 1
-    return os.path.join(output_dir, unique_name)
-
-
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--gpu', '-g', type=int, default=-1)
     p.add_argument('--pretrained_model', '-P',
                    type=str, default=DEFAULT_MODEL_PATH)
-    p.add_argument('--input', '-i', required=False)
+    p.add_argument('--input', '-i', required=True)
     p.add_argument('--sr', '-r', type=int, default=44100)
     p.add_argument('--n_fft', '-f', type=int, default=2048)
     p.add_argument('--hop_length', '-H', type=int, default=1024)
@@ -137,14 +129,14 @@ def main():
     p.add_argument('--tta', '-t', action='store_true')
     p.add_argument('--postprocess', '-p', action='store_true')
     p.add_argument('--output_dir', '-o', type=str, default="")
-    p.add_argument('--youtube_link', '--yt', type=str, required=False) 
     args = p.parse_args()
 
     output_dir = args.output_dir
-    if output_dir != "":
+    if output_dir != "":  # modifies output_dir if there's an arg specified
         output_dir = output_dir.rstrip('/') + '/'
         os.makedirs(output_dir, exist_ok=True)
 
+    # FIXME: THIS IS A BANDAID ON A BROKEN LEG.
     warnings.filterwarnings("ignore", "You are using `torch.load` with `weights_only=False`*.")
 
     print('loading model...', end=' ')
@@ -159,32 +151,15 @@ def main():
     model.to(device)
     print('done')
 
-# Load audio (either from file or YouTube)
-    if args.youtube_link:
-    # If --yt is provided, download the audio from YouTube
-        print('Downloading audio from YouTube...', end=' ')
-        yt = YouTube(args.youtube_link, on_progress_callback=on_progress)
-        print(f'{yt.title} downloaded.')
-    
-        ys = yt.streams.get_audio_only()
-        temp_audio_file = os.path.join(output_dir, yt.title + '.mp3')
-        ys.download(output_path=output_dir, filename=yt.title + '.mp3')
-    
-        # Load the audio using librosa
-        print(f'Loading audio from {temp_audio_file}...', end=' ')
-        X, sr = librosa.load(temp_audio_file, sr=args.sr, mono=False, dtype=np.float32, res_type='kaiser_fast')
-        print('done')
-        basename = yt.title  # Set basename to YouTube video title
-    else:
-        # If --yt is not provided, load audio from file
-        if not args.input:
-            raise ValueError("Either --input or --yt must be provided.")
-        print('loading wave source...', end=' ')
-        X, sr = librosa.load(args.input, sr=args.sr, mono=False, dtype=np.float32, res_type='kaiser_fast')
-        basename = os.path.splitext(os.path.basename(args.input))[0]  # Extract basename from file
-        print('done')
-        
+    print('loading wave source...', end=' ')
+    X, sr = librosa.load(
+        args.input, sr=args.sr, mono=False, dtype=np.float32, res_type='kaiser_fast'
+    )
+    basename = os.path.splitext(os.path.basename(args.input))[0]
+    print('done')
+
     if X.ndim == 1:
+        # mono to stereo
         X = np.asarray([X, X])
 
     print('stft of wave source...', end=' ')
@@ -204,21 +179,23 @@ def main():
     else:
         y_spec, v_spec = sp.separate(X_spec)
 
+    # Inverse STFT for separated instruments and vocals
     print('Inverse STFT of instruments...', end=' ')
     wave_instruments = spec_utils.spectrogram_to_wave(y_spec, hop_length=args.hop_length)
     print('done')
-    instruments_file = generate_unique_filename(output_dir, f"{basename}_Instruments", ".wav")
-    sf.write(instruments_file, wave_instruments.T, sr)
+    sf.write('{}{}_Instruments.wav'.format(output_dir, basename), wave_instruments.T, sr)
 
     print('Inverse STFT of vocals...', end=' ')
     wave_vocals = spec_utils.spectrogram_to_wave(v_spec, hop_length=args.hop_length)
     print('done')
-    vocals_file = generate_unique_filename(output_dir, f"{basename}_Vocals", ".wav")
-    sf.write(vocals_file, wave_vocals.T, sr)
+    sf.write('{}{}_Vocals.wav'.format(output_dir, basename), wave_vocals.T, sr)
 
+    # Now generate and save spectrograms for instruments
     print('Generating spectrogram for instruments...')
     D_instruments = librosa.stft(wave_instruments)
-    for i in range(D_instruments.shape[0]):
+
+    # Loop through each channel
+    for i in range(D_instruments.shape[0]):  # D_instruments.shape[0] is 2 for stereo
         S_db_instruments = librosa.amplitude_to_db(np.abs(D_instruments[i]), ref=np.max)
         plt.figure(figsize=(12, 8))
         librosa.display.specshow(S_db_instruments, sr=sr, x_axis='time', y_axis='log', cmap='viridis')
@@ -227,13 +204,15 @@ def main():
         plt.xlabel('Time (s)')
         plt.ylabel('Frequency (Hz)')
         plt.grid(True)
-        instruments_image_file = generate_unique_filename(output_dir, f"{basename}_Instruments_Channel_{i + 1}", ".png")
-        plt.savefig(instruments_image_file, dpi=300, bbox_inches='tight')
+        plt.savefig('{}{}_Instruments_Channel_{}.png'.format(output_dir, basename, i + 1), dpi=300, bbox_inches='tight')
         plt.close()
 
+    # Now generate and save spectrograms for vocals
     print('Generating spectrogram for vocals...')
     D_vocals = librosa.stft(wave_vocals)
-    for i in range(D_vocals.shape[0]):
+
+    # Loop through each channel
+    for i in range(D_vocals.shape[0]):  # D_vocals.shape[0] is 2 for stereo
         S_db_vocals = librosa.amplitude_to_db(np.abs(D_vocals[i]), ref=np.max)
         plt.figure(figsize=(12, 8))
         librosa.display.specshow(S_db_vocals, sr=sr, x_axis='time', y_axis='log', cmap='viridis')
@@ -242,18 +221,18 @@ def main():
         plt.xlabel('Time (s)')
         plt.ylabel('Frequency (Hz)')
         plt.grid(True)
-        vocals_image_file = generate_unique_filename(output_dir, f"{basename}_Vocals_Channel_{i + 1}", ".png")
-        plt.savefig(vocals_image_file, dpi=300, bbox_inches='tight')
+        plt.savefig('{}{}_Vocals_Channel_{}.png'.format(output_dir, basename, i + 1), dpi=300, bbox_inches='tight')
         plt.close()
 
     if args.output_image:
+        # Optional: if you still want to save the original images as well
         image = spec_utils.spectrogram_to_image(y_spec)
-        image_instruments_file = generate_unique_filename(output_dir, f"{basename}_Instruments", ".jpg")
-        utils.imwrite(image_instruments_file, image)
+        utils.imwrite('{}{}_Instruments.jpg'.format(
+            output_dir, basename), image)
 
         image = spec_utils.spectrogram_to_image(v_spec)
-        image_vocals_file = generate_unique_filename(output_dir, f"{basename}_Vocals", ".jpg")
-        utils.imwrite(image_vocals_file, image)
+        utils.imwrite('{}{}_Vocals.jpg'.format(output_dir, basename), image)
+
 
 if __name__ == '__main__':
     main()
